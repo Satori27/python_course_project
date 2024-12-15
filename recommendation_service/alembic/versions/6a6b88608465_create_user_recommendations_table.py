@@ -23,9 +23,9 @@ def upgrade() -> None:
     CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
     CREATE TABLE If NOT EXISTS user_recommendations (
-        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        user_id UUID NOT NULL,
-        movie_id UUID NOT NULL
+        id SERIAL PRIMARY KEY,
+        user_id INT NOT NULL,
+        movie_id INT NOT NULL
 );
 """)
 

@@ -10,11 +10,12 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 
 import psycopg2
 import psycopg2.extras
-from settings import DB_CONFIG
+from settings import DB_RECOMMEND_CONFIG, DB_STATS_CONFIG
 from psycopg2.extensions import register_adapter, AsIs
 register_adapter(np.int64, AsIs)
 
 np.random.seed(123)
+print(111111111)
 
 ratings = pd.read_csv('rating.csv',
                       parse_dates=['timestamp'])
@@ -210,11 +211,12 @@ all_movieIds = ratings['movieId'].unique()
 
 model = NCF(num_users, num_items, train_ratings, all_movieIds)
 
-model.load_state_dict(torch.load("model_weights_dynamic_best.pth"))
+model.load_state_dict(torch.load("model_weights_dynamic_best.pth", weights_only=True))
+print(ratings.info())
 
 #rec = get_top_k_recommendations(model, [0, 46, 1115, 452], all_movieIds, k = 3)
 
-names = pd.read_csv('movie.csv')
+# names = pd.read_csv('movie.csv')
 
 """for user in [0]:
   for movie in rec[user]:
@@ -230,7 +232,7 @@ online_training(new_data)
 
 rec = get_top_k_recommendations(model, [0, 1, 2], all_movieIds, k = 100)
 
-names = pd.read_csv('movielens-20m-dataset/movie.csv')
+# names = pd.read_csv('movielens-20m-dataset/movie.csv')
 
 for user in [0]:
   for movie in rec[user]:
@@ -245,17 +247,71 @@ def online_training(new_data : pd.DataFrame):
     loss = model.online_training_step(new_user_input, new_item_input, new_labels)
     print(f"Online training loss (epoch {epoch + 1}): {loss}")
 
-from test import get_user_actions
-from test import recomendations_to_db
-from test import users_list
+def get_user_actions():
+    query = """SELECT user_id, movie_id FROM user_movie"""
+    try:
+        with psycopg2.connect(**DB_STATS_CONFIG) as conn:
+            df = pd.read_sql(query, con = conn)
+    except Exception as e:
+        print(f"get_user_actions.Error: {e}")
+    
+    df.insert(2, 'rating', 1)
+    
+    return df
+
+
+
+#print(get_user_actions())
+
+def recomendations_to_db(rec : dict):
+    query = """INSERT INTO user_recommendations(user_id, movie_id)
+        VALUES (%(user_id)s, %(movie_id)s);"""
+    try:
+        with psycopg2.connect(**DB_RECOMMEND_CONFIG) as conn:
+            with conn.cursor() as cur:
+                for user_id in rec.keys():
+                    for movie in rec[user_id]:
+                        cur.execute(query, {"user_id": user_id, "movie_id" : movie[1]})
+    except Exception as e:
+        print(f"recomendations_to_db.Error: {e}")
+
+#recomendations_to_db({1 : [1]})
+
+def get_users() -> list:
+    query = """SELECT user_id FROM users"""
+
+    try:
+        with psycopg2.connect(**DB_STATS_CONFIG) as conn:
+            with conn.cursor() as cur:
+                cur.execute(query)
+
+                return cur.fetchall()
+    except Exception as e:
+        print(f"get_users.Error: {e}")
+
+
+def users_list():
+    users_raw = get_users()
+    users = []
+
+    for user in users_raw:
+        users.append(user[0])
+    
+    return users
+    
 #train_part = get_user_actions()
 
 #online_training(train_part)
 
 def update_rec():
     users = users_list()
+    print(users)
     rec = get_top_k_recommendations(model, users, all_movieIds, k = 3)
+    print(rec)
     recomendations_to_db(rec)
 
-update_rec()
+try:
+    update_rec()
+except Exception as e:
+    print(f"main.Error: {e}")
 #recomendations_to_db(rec)

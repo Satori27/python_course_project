@@ -5,6 +5,7 @@ services:
       - "2181:2181"
     environment:
       ALLOW_ANONYMOUS_LOGIN: "yes"
+    mem_limit: 1g
 
   kafka:
     image: bitnami/kafka:latest
@@ -16,6 +17,7 @@ services:
       KAFKA_LISTENERS: PLAINTEXT://:9092
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
       ALLOW_PLAINTEXT_LISTENER: "yes"
+    mem_limit: 1g
     depends_on:
       - zookeeper
     healthcheck:
@@ -34,6 +36,10 @@ services:
     env_file:
       - .env
     command: /bin/sh -c "alembic upgrade head && python3 app/main.py"
+    depends_on:
+      pg_stats:
+        condition: service_healthy
+    mem_limit: 1g
 
   recommendation_service:
     build:
@@ -43,12 +49,35 @@ services:
     env_file:
       - .env
     command: /bin/sh -c "alembic upgrade head && python -m uvicorn app.main:app --reload --host 0.0.0.0"
+    depends_on:
+      pg_recommend:
+        condition: service_healthy
+
     ports:
       - 8000:8000
+    mem_limit: 1g
+
+
+  ml_service:
+    build:
+      context: ml_service
+    environment:
+      DB_RECOMMEND_HOST: pg_recommend
+      DB_STATS_HOST: pg_stats
+    env_file:
+      - .env
+    mem_limit: 8g
 
     depends_on:
       pg_recommend:
         condition: service_healthy
+      pg_stats:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 8g
+      
 
   pg_stats:
     image: postgres:14
@@ -66,6 +95,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    mem_limit: 1g
+
 
 
   pg_recommend:
@@ -84,11 +115,10 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
+    mem_limit: 1g
 
 volumes:
   stats_pg:
     name: stats_pg
-
   recommend_pg:
     name: recommend_pg
