@@ -1,0 +1,57 @@
+### 1. Регистрация нового администратора
+POST http://localhost:8000/register
+Content-Type: application/json
+
+{
+    "username": "admin_user",
+    "password": "admin_password",
+    "full_name": "Admin Admin Admin",
+    "roles": "admin"
+}
+
+### 2. Авторизация администратора и сохранение токена
+POST http://localhost:8080/login
+Content-Type: application/x-www-form-urlencoded
+
+username=admin_user&password=admin_password
+
+> {% client.global.set("admin_token", response.body.access_token) %}
+
+### 3. Регистрация нового обычного пользователя
+POST http://localhost:8000/register
+Content-Type: application/json
+
+{
+    "username": "john_doe",
+    "password": "secret_password",
+    "full_name": "John Doe",
+    "roles": "user"
+}
+
+### 4. Авторизация обычного пользователя и сохранение токена
+POST http://localhost:8000/login
+Content-Type: application/x-www-form-urlencoded
+
+username=john_doe&password=secret_password
+
+> {% client.global.set("user_token", response.body.access_token) %}
+
+### 5
+POST http://localhost:8000/admin/upload_movie
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbl91c2VyIiwiaWQiOjMsInJvbGVzIjpbImFkbWluIl0sImV4cCI6MTczNDk3NjkzMX0.xo4rpKp0EJ_iYiZ5RdYU7aKKk0e7SuvlA-LMEkjMGdc
+Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW
+
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="title"
+
+My Movie
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="description"
+
+This is a description of the movie.
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="file"; filename="2024-12-04 18-17-45.mp4"
+Content-Type: video/mp4
+
+< C:\Users\Asus\PycharmProjects\fastapi-video-player\2024-12-04 18-17-45.mp4
+------WebKitFormBoundary7MA4YWxkTrZu0gW--
