@@ -48,13 +48,13 @@ services:
       DB_RECOMMEND_HOST: pg_recommend
     env_file:
       - .env
-    command: /bin/sh -c "alembic upgrade head && python -m uvicorn app.main:app --reload --host 0.0.0.0"
+    command: /bin/sh -c "alembic upgrade head && python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000"
     depends_on:
       pg_recommend:
         condition: service_healthy
 
     ports:
-      - 8000:8000
+      - 8004:8000
     mem_limit: 1g
 
 
@@ -117,8 +117,64 @@ services:
       retries: 5
     mem_limit: 1g
 
+
+  producer:
+    build:
+      context: main
+    ports:
+      - "8001:8000"
+    environment:
+      KAFKA_BROKER: ${KAFKA_BROKER:-kafka:9092}
+      MINIO_ENDPOINT: "minio:9000"
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minio123}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minio123}
+      RECOMMENDATION_SERVICE_URL: recommendation_service
+    depends_on:
+      kafka:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_started
+
+  db:
+    image: postgres:16-alpine3.21
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-mydatabase}
+      POSTGRES_USER: ${POSTGRES_USER:-myuser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mypassword}
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-myuser} -d ${POSTGRES_DB:-mydatabase}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  minio:
+   image: minio/minio:latest
+   command: server --console-address ":9001" /data/
+   ports:
+     - "9000:9000"
+     - "9001:9001"
+   environment:
+     MINIO_ROOT_USER: minio123
+     MINIO_ROOT_PASSWORD: minio123
+   volumes:
+     - minio-storage:/data
+   healthcheck:
+     test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+     interval: 30s
+     timeout: 20s
+     retries: 3
+
+
 volumes:
   stats_pg:
     name: stats_pg
   recommend_pg:
     name: recommend_pg
+  postgres_data:
+  minio-storage:

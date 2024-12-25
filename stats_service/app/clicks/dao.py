@@ -3,7 +3,6 @@
 from collections import deque
 import json
 import logging
-from uuid import UUID
 
 import asyncpg
 

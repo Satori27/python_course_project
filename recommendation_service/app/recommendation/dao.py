@@ -1,11 +1,11 @@
-from uuid import UUID
 from app.database.conn import close_connection_pool, create_connection_pool
 import asyncpg
 from app.errors.internal import InternalError
 
 
 class RecommendationDAO():
-    async def GetRecommendation(user_id: UUID):
+    async def GetRecommendation(user_id: int):
+        print(f"RecommendationDAO.GetRecommendation user_id: {user_id}")
         connection_pool: asyncpg.Pool = await create_connection_pool()
         try:
             async with connection_pool.acquire() as connection:

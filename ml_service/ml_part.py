@@ -1,5 +1,22 @@
 import pandas as pd
 import numpy as np
+
+import torch
+import torch.nn as nn
+import pytorch_lightning as pl
+from torch.utils.data import Dataset, DataLoader
+
+
+from pytorch_accelerated.callbacks import TrainerCallback
+import torchmetrics
+
+import psycopg2
+import psycopg2.extras
+from psycopg2.extensions import register_adapter, AsIs
+
+
+import pandas as pd
+import numpy as np
 from tqdm.notebook import tqdm
 
 import torch
@@ -16,8 +33,11 @@ register_adapter(np.int64, AsIs)
 
 np.random.seed(123)
 print(111111111)
+register_adapter(np.int64, AsIs)
 
-ratings = pd.read_csv('rating.csv',
+np.random.seed(123)
+
+'''ratings = pd.read_csv('rating.csv',
                       parse_dates=['timestamp'])
 
 rand_userIds = np.random.choice(ratings['userId'].unique(),
@@ -26,15 +46,22 @@ rand_userIds = np.random.choice(ratings['userId'].unique(),
 
 ratings = ratings.loc[ratings['userId'].isin(rand_userIds)]
 
+print(ratings.info())'''
+
+#ratings.to_csv("ratings.csv")
+
+ratings = pd.read_csv('rating.csv',
+                      parse_dates=['timestamp'])
+
 ratings['rank_latest'] = ratings.groupby(['userId'])['timestamp'] \
                                 .rank(method='first', ascending=False)
 
 train_ratings = ratings[ratings['rank_latest'] != 1]
-test_ratings = ratings[ratings['rank_latest'] == 1]
+#test_ratings = ratings[ratings['rank_latest'] == 1]
 
 # drop columns that we no longer need
 train_ratings = train_ratings[['userId', 'movieId', 'rating']]
-test_ratings = test_ratings[['userId', 'movieId', 'rating']]
+#test_ratings = test_ratings[['userId', 'movieId', 'rating']]
 
 train_ratings.loc[:, 'rating'] = 1
 
@@ -168,7 +195,7 @@ class NCF(pl.LightningModule):
     loss = model.online_training_step(new_user_input, new_item_input, new_labels)
     print(f"Online training loss (epoch {epoch + 1}): {loss}")"""
 
-def get_top_k_recommendations(model, user_ids, all_movie_ids, k=100):
+def get_top_k_recommendations_explicit(model, user_ids, all_movie_ids, k=100, start_rank = 0):
     """
     Получить топ-K фильмов для каждого пользователя.
 
@@ -199,7 +226,7 @@ def get_top_k_recommendations(model, user_ids, all_movie_ids, k=100):
         top_k_indices = torch.topk(scores, k=k).indices
 
         # Добавляем в результат соответствующие ID фильмов
-        top_k_movie_ids = [(rank + 1, all_movie_ids[i]) for rank, i in enumerate(top_k_indices)]
+        top_k_movie_ids = [(rank + 1 + start_rank, all_movie_ids[i]) for rank, i in enumerate(top_k_indices)]
         recommendations[user_id] = top_k_movie_ids
 
     return recommendations
@@ -209,14 +236,147 @@ num_items = ratings['movieId'].max()+1
 
 all_movieIds = ratings['movieId'].unique()
 
-model = NCF(num_users, num_items, train_ratings, all_movieIds)
+model_ex = NCF(num_users, num_items, train_ratings, all_movieIds)
 
-model.load_state_dict(torch.load("model_weights_dynamic_best.pth", weights_only=True))
-print(ratings.info())
+model_ex.load_state_dict(torch.load("model_weights_dynamic_best.pth", weights_only= True))
 
-#rec = get_top_k_recommendations(model, [0, 46, 1115, 452], all_movieIds, k = 3)
+#names = pd.read_csv('movie.csv')
 
-# names = pd.read_csv('movie.csv')
+ratings_df = ratings
+
+ratings_df["userId"] = ratings_df["userId"].astype(str)
+
+ratings_per_user = ratings_df.groupby('userId').rating.count()
+ratings_per_item = ratings_df.groupby('movieId').rating.count()
+
+user_lookup = {v: i+1 for i, v in enumerate(ratings_df['userId'].unique())}
+movie_lookup = {v: i+1 for i, v in enumerate(ratings_df['movieId'].unique())}
+
+
+class UserItemRatingDataset(Dataset):
+    def __init__(self, df, movie_lookup, user_lookup):
+        self.df = df
+        self.movie_lookup = movie_lookup
+        self.user_lookup = user_lookup
+
+    def __getitem__(self, index):
+        row = self.df.iloc[index]
+        user_id = self.user_lookup[row.userId]
+        movie_id = self.movie_lookup[row.movieId]
+
+        rating = torch.tensor(row.rating, dtype=torch.float32)
+
+        return (user_id, movie_id), rating
+
+    def __len__(self):
+        return len(self.df)
+
+class MfDotBias(nn.Module):
+
+    def __init__(
+        self, n_factors, n_users, n_items, ratings_range=None, use_biases=True
+    ):
+        super().__init__()
+        self.bias = use_biases
+        self.y_range = ratings_range
+        self.user_embedding = nn.Embedding(n_users+1, n_factors, padding_idx=0)
+        self.item_embedding = nn.Embedding(n_items+1, n_factors, padding_idx=0)
+
+        if use_biases:
+            self.user_bias = nn.Embedding(n_users+1, 1, padding_idx=0)
+            self.item_bias = nn.Embedding(n_items+1, 1, padding_idx=0)
+
+    def forward(self, inputs):
+        users, items = inputs
+        dot = self.user_embedding(users) * self.item_embedding(items)
+        result = dot.sum(1)
+        if self.bias:
+            result = (
+                result + self.user_bias(users).squeeze() + self.item_bias(items).squeeze()
+            )
+
+        if self.y_range is None:
+            return result
+        else:
+            return (
+                torch.sigmoid(result) * (self.y_range[1] - self.y_range[0])
+                + self.y_range[0]
+            )
+        
+class RecommenderMetricsCallback(TrainerCallback):
+    def __init__(self):
+        self.metrics = torchmetrics.MetricCollection(
+            {
+                "mse": torchmetrics.MeanSquaredError(),
+                "mae": torchmetrics.MeanAbsoluteError(),
+            }
+        )
+
+    def _move_to_device(self, trainer):
+        self.metrics.to(trainer.device)
+
+    def on_training_run_start(self, trainer, **kwargs):
+        self._move_to_device(trainer)
+
+    def on_evaluation_run_start(self, trainer, **kwargs):
+        self._move_to_device(trainer)
+
+    def on_eval_step_end(self, trainer, batch, batch_output, **kwargs):
+        preds = batch_output["model_outputs"]
+        self.metrics.update(preds, batch[1])
+
+    def on_eval_epoch_end(self, trainer, **kwargs):
+        metrics = self.metrics.compute()
+
+        mse = metrics["mse"].cpu()
+        trainer.run_history.update_metric("mae", metrics["mae"].cpu())
+        trainer.run_history.update_metric("mse", mse)
+        trainer.run_history.update_metric("rmse",  np.sqrt(mse))
+
+        self.metrics.reset()
+
+def load_mf_model():
+    model = MfDotBias(
+        120, len(user_lookup), len(movie_lookup), ratings_range=[0.5, 5.5]
+    )
+    model_path = "best_mf_model.pth"
+    model.load_state_dict(torch.load(model_path, map_location=torch.device('cpu')))
+    model.eval()  # Переводим модель в режим оценки
+    print(f"Модель загружена из {model_path}")
+    return model
+
+all_movies_imp = [movie_lookup[movie_id] for movie_id in ratings_df['movieId'].unique() if movie_id in movie_lookup]
+
+model_imp = load_mf_model()
+
+def recommend_top_k_imp(model, user_ids, all_item_ids, k=30, device='cpu'):
+    model.eval()
+    model.to(device)
+    recommendations = {}
+
+    #max_user_id = model.user_embedding.num_embeddings - 1
+    #max_item_id = model.item_embedding.num_embeddings - 1
+
+    #if user_id > max_user_id or user_id < 0:
+    #  return []
+
+
+    # Создаем тензоры для пользователя и всех доступных фильмов
+    #user_tensor = torch.tensor([user_id] * len(all_item_ids), dtype=torch.long, device=device)
+    item_tensor = torch.tensor(all_item_ids, dtype=torch.long, device=device)
+
+    for user_id in user_ids:
+        user_tensor = torch.tensor([user_id] * len(all_item_ids), dtype=torch.long, device=device)
+
+        with torch.no_grad():
+            scores = model((user_tensor, item_tensor))
+
+        top_k_indices = torch.topk(scores, k=k).indices
+
+        top_k_item_ids = [(rank + 1, all_item_ids[i]) for rank, i in enumerate(top_k_indices.cpu().numpy())]
+        recommendations[user_id] = top_k_item_ids
+
+    return recommendations
 
 """for user in [0]:
   for movie in rec[user]:
@@ -232,7 +392,7 @@ online_training(new_data)
 
 rec = get_top_k_recommendations(model, [0, 1, 2], all_movieIds, k = 100)
 
-# names = pd.read_csv('movielens-20m-dataset/movie.csv')
+names = pd.read_csv('movielens-20m-dataset/movie.csv')
 
 for user in [0]:
   for movie in rec[user]:
@@ -244,8 +404,9 @@ def online_training(new_data : pd.DataFrame):
   new_labels = torch.tensor(new_data['rating'].values, dtype=torch.float)
 
   for epoch in range(3):  # Online learning for 3 epochs
-    loss = model.online_training_step(new_user_input, new_item_input, new_labels)
+    loss = model_ex.online_training_step(new_user_input, new_item_input, new_labels)
     print(f"Online training loss (epoch {epoch + 1}): {loss}")
+
 
 def get_user_actions():
     query = """SELECT user_id, movie_id FROM user_movie"""
@@ -303,15 +464,14 @@ def users_list():
 
 #online_training(train_part)
 
-def update_rec():
+def update_rec(implicit_k = 3, explicit_k = 3):
     users = users_list()
-    print(users)
-    rec = get_top_k_recommendations(model, users, all_movieIds, k = 3)
-    print(rec)
-    recomendations_to_db(rec)
+    #print(users)
+    rec1 = recommend_top_k_imp(model_imp, users, all_movies_imp, k = implicit_k)
 
-try:
-    update_rec()
-except Exception as e:
-    print(f"main.Error: {e}")
-#recomendations_to_db(rec)
+    rec2 = get_top_k_recommendations_explicit(model_ex, users, all_movieIds, k = explicit_k, start_rank=implicit_k)
+    #print(rec)
+    recomendations_to_db(rec1)
+    recomendations_to_db(rec2)
+
+update_rec()

@@ -5,7 +5,6 @@ from aiokafka import AIOKafkaConsumer
 from clicks.dao import ClicksDAO
 from consumer.consumer import consume_clicks
 
-import uuid
 import asyncpg
 from config.config import DB_CONFIG
 
@@ -26,9 +25,6 @@ async def close_connection_pool( connection_pool: asyncpg.Pool):
     print("Connection pool closed.")
 
 async def main():
-
-    fake_data_users = [str(uuid.uuid4()) for _ in range(100)]
-    fake_data_movie = [str(uuid.uuid4()) for _ in range(100)]
 
     # SQL-запрос для вставки
     insert_query_users = """

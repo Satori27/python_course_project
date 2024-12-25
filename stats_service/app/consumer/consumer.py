@@ -1,6 +1,5 @@
 import json
 import logging
-from uuid import UUID
 from aiokafka import AIOKafkaConsumer
 
 
@@ -25,9 +24,9 @@ async def consume_clicks(consume, dao):
     await consume.start()
     try:
         async for message in consume:
-            user_id: UUID = UUID(message['user_id'])
-            movie_id: UUID = UUID(message['movie_id'])
-            logger.info(f"Получено сообщение: {user_id, movie_id}")
+            logger.info(f"Получено сообщение: {message.value}")
+            user_id: int = int(message['value']['user_id'])
+            movie_id: int = int(message['value']['movie_id'])
             await dao.process_message(user_id, movie_id)
     except KeyboardInterrupt:
         logger.info("Консьюмер остановлен пользователем.")
