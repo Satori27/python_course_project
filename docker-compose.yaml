@@ -170,6 +170,17 @@ services:
      timeout: 20s
      retries: 3
 
+  frontend:
+    build:
+      context: frontend
+    ports:
+      - "9010:8504"
+    environment:
+      MAIN_API_URL: producer
+    depends_on:
+      producer:
+        condition: service_started
+
 
 volumes:
   stats_pg:
@@ -178,3 +189,4 @@ volumes:
     name: recommend_pg
   postgres_data:
   minio-storage:
+

@@ -19,10 +19,11 @@ async def create_connection_pool() -> asyncpg.Pool:
     return connection_pool
 
 
-async def close_connection_pool( connection_pool: asyncpg.Pool):
+async def close_connection_pool(connection_pool: asyncpg.Pool):
     # Закрытие пула соединений
     await connection_pool.close()
     print("Connection pool closed.")
+
 
 async def main():
 

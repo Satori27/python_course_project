@@ -3,7 +3,6 @@ import os
 import logging
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.exc import SQLAlchemyError
 from src.repositories.movie_repository import Movie
 from src.minio.minio_service import MinioClientWrapper
 
