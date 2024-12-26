@@ -19,6 +19,7 @@ import pandas as pd
 import numpy as np
 from tqdm.notebook import tqdm
 
+import time
 import torch
 import torch.nn as nn
 import pytorch_lightning as pl
@@ -474,4 +475,7 @@ def update_rec(implicit_k = 3, explicit_k = 3):
     recomendations_to_db(rec1)
     recomendations_to_db(rec2)
 
-update_rec()
+
+while True:
+    update_rec()
+    time.sleep(70)

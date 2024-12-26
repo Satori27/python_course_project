@@ -20,6 +20,7 @@ class Movie(BaseDeclaration):
     description = Column(String, nullable=True)
     s3_key = Column(String, unique=True, nullable=False)  # Путь к объекту в S3
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    genres = Column(String)
 
 def create_movie(
         db: Session,
