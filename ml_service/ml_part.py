@@ -466,6 +466,7 @@ def users_list():
 #online_training(train_part)
 
 def update_rec(implicit_k = 3, explicit_k = 3):
+    print("Модель запустилась")
     users = users_list()
     #print(users)
     rec1 = recommend_top_k_imp(model_imp, users, all_movies_imp, k = implicit_k)
@@ -477,5 +478,6 @@ def update_rec(implicit_k = 3, explicit_k = 3):
 
 
 while True:
+    print("Модель перезапустилась")
     update_rec()
     time.sleep(70)

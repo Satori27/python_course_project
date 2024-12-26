@@ -86,4 +86,4 @@ def upload_movies(csv_file_path: str, file_path: str):
                 logging.error(f"Failed to insert movies into the database: {e}")
 
 # Запуск загрузки
-upload_movies("movie_rating.csv", "./SampleVideo_360x240.mp4")
+upload_movies("movie_rating.csv", "./SampleVideo_360x240_1mb.mp4")

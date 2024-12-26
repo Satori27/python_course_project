@@ -25,8 +25,8 @@ async def consume_clicks(consume, dao):
     try:
         async for message in consume:
             logger.info(f"Получено сообщение: {message.value}")
-            user_id: int = int(message['value']['user_id'])
-            movie_id: int = int(message['value']['movie_id'])
+            user_id: int = int(message.value['user_id'])
+            movie_id: int = int(message.value['movie_id'])
             await dao.process_message(user_id, movie_id)
     except KeyboardInterrupt:
         logger.info("Консьюмер остановлен пользователем.")
