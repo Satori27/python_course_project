@@ -76,6 +76,7 @@ async def get_movies(
         {
             "id": movie.id,
             "title": movie.title,
+            "genres": movie.genres,
             "description": movie.description,
             "s3_key": movie.s3_key,
             "created_at": movie.created_at,
@@ -85,7 +86,8 @@ async def get_movies(
 
 @movie_router.get("/recs/")
 async def get_movie_recommendations(
-        current_user: User = Depends(get_current_active_user)
+        current_user: User = Depends(get_current_active_user),
+        db: Session = Depends(get_db)
 ):
     logger.info(f"movie_router.get_movie_recommendations {current_user}")
     user_id = current_user.id
@@ -104,9 +106,18 @@ async def get_movie_recommendations(
 
         recommendations = response.json()
 
-        return [
-            {"movie_id": rec["movie_id"]} for rec in recommendations
-        ]
+        movies_data = []
+        for rec in recommendations:
+            movie = get_movie_by_id(db, rec['movie_id'])
+            if movie:
+                movies_data.append({
+                    "id": movie.id,
+                    "title": movie.title,
+                    "genres": movie.genres
+                })
+
+        return movies_data
+
     except httpx.RequestError as e:
         details: str = f"Ошибка подключения к сервису рекомендаций: {str(e)}"
         logging.error(details)

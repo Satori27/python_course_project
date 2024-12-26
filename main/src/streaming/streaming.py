@@ -50,10 +50,12 @@ async def download_movie(
         file_stream = minio_client.download_movie(movie.s3_key)
 
         # Настраиваем заголовки для скачивания файла
+        #headers = {
+       #     "Content-Disposition": f'attachment; filename="{movie.title}.mp4"'
+        #}
         headers = {
-            "Content-Disposition": f'attachment; filename="{movie.title}.mp4"'
+            "Content-Disposition": f'inline; filename="{movie.title}.mp4"'
         }
-
         user_ip = request.client.host
         message = {
             "event": "video_streamed",
