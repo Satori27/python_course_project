@@ -26,27 +26,27 @@ async def close_connection_pool( connection_pool: asyncpg.Pool):
 
 async def main():
 
-    # SQL-запрос для вставки
-    insert_query_users = """
-    INSERT INTO users (name) VALUES ($1)
-    """
+    # # SQL-запрос для вставки
+    # insert_query_users = """
+    # INSERT INTO users (name) VALUES ($1)
+    # """
 
-    insert_query_movie = """
-    INSERT INTO user_movie (user_id, movie_id) VALUES ($1, $2)
-    """
+    # insert_query_movie = """
+    # INSERT INTO user_movie (user_id, movie_id) VALUES ($1, $2)
+    # """
 
-    connection_pool: asyncpg.Pool = await create_connection_pool()
-    try:
-        for i in range(100):
-            async with connection_pool.acquire() as connection:
+    # connection_pool: asyncpg.Pool = await create_connection_pool()
+    # try:
+    #     for i in range(100):
+    #         async with connection_pool.acquire() as connection:
 
-                await connection.execute(insert_query_users, f"name{i}")
-                await connection.execute(insert_query_movie, i, i)
-                print(insert_query_movie, i, i)
-    except Exception as e:
-        print(f"Error: RecommendationDAO.GetRecommendation\n {e}")
-    finally:
-        await close_connection_pool(connection_pool)
+    #             await connection.execute(insert_query_users, f"name{i}")
+    #             await connection.execute(insert_query_movie, i, i)
+    #             print(insert_query_movie, i, i)
+    # except Exception as e:
+    #     print(f"Error: RecommendationDAO.GetRecommendation\n {e}")
+    # finally:
+    #     await close_connection_pool(connection_pool)
 
     consume = AIOKafkaConsumer(
         'user-stats',  # Топик

@@ -18,7 +18,7 @@ class Movie(BaseDeclaration):
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String, nullable=False)
     description = Column(String, nullable=True)
-    s3_key = Column(String, unique=True, nullable=False)  # Путь к объекту в S3
+    s3_key = Column(String, unique=False, nullable=False)  # Путь к объекту в S3
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     genres = Column(String)
 
